@@ -4,6 +4,10 @@ prefix:
 ipv6: false
 
 global:
+
+  # Set SAMPLED_DEFAULT_RATE parameter for all projects
+  # sampledDefaultRate: 1.0
+
   nodeSelector: {}
   tolerations: []
   sidecars: []
@@ -247,6 +251,7 @@ sentry:
   # - organizations:custom-metric
   # - organizations:custom-metrics-experimental
   # - organizations:derive-code-mappings
+  # other feature here https://github.com/getsentry/sentry/blob/24.11.2/src/sentry/features/temporary.py
 
   worker:
     enabled: true
@@ -633,6 +638,68 @@ sentry:
       minReplicas: 1
       maxReplicas: 3
       targetCPUUtilizationPercentage: 50
+    sidecars: []
+    topologySpreadConstraints: []
+    volumes: []
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 5
+      periodSeconds: 320
+    # volumeMounts:
+    #   - mountPath: /dev/shm
+    #     name: dshm
+    # autoOffsetReset: "earliest"
+    # noStrictOffsetReset: false
+
+  monitorsClockTasks:
+    enabled: false
+    replicas: 1
+    env: []
+    resources: {}
+    #  requests:
+    #    cpu: 100m
+    #    memory: 250Mi
+    affinity: {}
+    nodeSelector: {}
+    securityContext: {}
+    containerSecurityContext: {}
+    # tolerations: []
+    # podLabels: {}
+    # it's better to use prometheus adapter and scale based on
+    # the size of the rabbitmq queue
+    autoscaling:
+      enabled: false
+    sidecars: []
+    topologySpreadConstraints: []
+    volumes: []
+    livenessProbe:
+      enabled: true
+      initialDelaySeconds: 5
+      periodSeconds: 320
+    # volumeMounts:
+    #   - mountPath: /dev/shm
+    #     name: dshm
+    # autoOffsetReset: "earliest"
+    # noStrictOffsetReset: false
+
+  monitorsClockTick:
+    enabled: false
+    replicas: 1
+    env: []
+    resources: {}
+    #  requests:
+    #    cpu: 100m
+    #    memory: 250Mi
+    affinity: {}
+    nodeSelector: {}
+    securityContext: {}
+    containerSecurityContext: {}
+    # tolerations: []
+    # podLabels: {}
+    # it's better to use prometheus adapter and scale based on
+    # the size of the rabbitmq queue
+    autoscaling:
+      enabled: false
     sidecars: []
     topologySpreadConstraints: []
     volumes: []
@@ -1822,30 +1889,37 @@ google: {}
 # google:
 #   clientId: ""
 #   clientSecret: ""
-#   existingSecret: ""
-#   existingSecretClientIdKey: "" # by default "client-id"
-#   existingSecretClientSecretKey: "" # by default "client-secret"
+#   existingSecret: "xxxxx"
+#   existingSecretClientIdKey: ""       # by default "client-id"
+#   existingSecretClientSecretKey: ""   # by default "client-secret"
 
 slack: {}
 # slack:
-#   clientId:
-#   clientSecret:
-#   signingSecret:
-#   existingSecret:
+#   clientId: ""
+#   clientSecret: ""
+#   signingSecret: ""
+#   existingSecret: "xxxxx"
+#   existingSecretClientId: ""          # by default "client-id"
+#   existingSecretClientSecret: ""      # by default "client-secret"
+#   existingSecretSigningSecret: ""     # by default "signing-secret"
 #   Reference -> https://develop.sentry.dev/integrations/slack/
 
 discord: {}
 # discord:
-#   applicationId:
-#   publicKey:
-#   clientSecret:
-#   botToken:
-#   existingSecret:
+#   applicationId: ""
+#   publicKey: ""
+#   clientSecret: ""
+#   botToken: ""
+#   existingSecret: "xxxxx"
+#   existingSecretApplicationId: ""     # by default "application-id"
+#   existingSecretPublicKey: ""         # by default "public-key"
+#   existingSecretClientSecret: ""      # by default "client-secret"
+#   existingSecretBotToken: ""          # by default "bot-token"
 #   Reference -> https://develop.sentry.dev/integrations/discord/
 
 openai: {}
 #   existingSecret: "xxxxx"
-#   existingSecretKey: ""   # by default "api-token"
+#   existingSecretKey: ""               # by default "api-token"
 
 nginx:
   enabled: true  # true, if Safari compatibility is needed
@@ -1891,6 +1965,8 @@ ingress:
   # If you are using AWS ALB Ingress controller, switch to true if you want activate the http to https redirection.
   alb:
     httpRedirect: false
+  # Add custom labels for ingress resource
+  # labels:
   # annotations:
   #   If you are using nginx ingress controller, please use at least those 2 annotations
   #   kubernetes.io/ingress.class: nginx
@@ -2064,11 +2140,12 @@ kafka:
   enabled: true
   provisioning:
     ## Increasing the replicationFactor enhances data reliability during Kafka pod failures by replicating data across multiple brokers.
-    # replicationFactor: 1
+    # Note that existing topics will remain with replicationFactor: 1 when updated.
+    replicationFactor: 3
     enabled: true
     # Topic list is based on files below.
     # - https://github.com/getsentry/snuba/blob/master/snuba/utils/streams/topics.py
-    # - https://github.com/getsentry/self-hosted/blob/master/install/create-kafka-topics.sh#L6
+    # - https://github.com/getsentry/sentry/blob/master/src/sentry/conf/types/kafka_definition.py
     ## Default number of partitions for topics when unspecified
     ##
     # numPartitions: 1
@@ -2096,26 +2173,23 @@ kafka:
         config:
           "message.timestamp.type": LogAppendTime
       - name: outcomes
+      - name: outcomes-dlq
       - name: outcomes-billing
+      - name: outcomes-billing-dlq
       - name: ingest-sessions
-      - name: snuba-sessions-commit-log
-        config:
-          "cleanup.policy": "compact,delete"
-          "min.compaction.lag.ms": "3600000"
       - name: snuba-metrics-commit-log
         config:
           "cleanup.policy": "compact,delete"
           "min.compaction.lag.ms": "3600000"
       - name: scheduled-subscriptions-events
       - name: scheduled-subscriptions-transactions
-      - name: scheduled-subscriptions-sessions
       - name: scheduled-subscriptions-metrics
       - name: scheduled-subscriptions-generic-metrics-sets
       - name: scheduled-subscriptions-generic-metrics-distributions
       - name: scheduled-subscriptions-generic-metrics-counters
+      - name: scheduled-subscriptions-generic-metrics-gauges
       - name: events-subscription-results
       - name: transactions-subscription-results
-      - name: sessions-subscription-results
       - name: metrics-subscription-results
       - name: generic-metrics-subscription-results
       - name: snuba-queries
@@ -2125,6 +2199,7 @@ kafka:
         config:
           "message.timestamp.type": LogAppendTime
       - name: profiles-call-tree
+      - name: snuba-profile-chunks
       - name: ingest-replay-events
         config:
           "message.timestamp.type": LogAppendTime
@@ -2144,6 +2219,10 @@ kafka:
         config:
           "cleanup.policy": "compact,delete"
           "min.compaction.lag.ms": "3600000"
+      - name: snuba-generic-metrics-gauges-commit-log
+        config:
+          "cleanup.policy": "compact,delete"
+          "min.compaction.lag.ms": "3600000"
       - name: generic-events
         config:
           "message.timestamp.type": LogAppendTime
@@ -2154,29 +2233,48 @@ kafka:
       - name: group-attributes
         config:
           "message.timestamp.type": LogAppendTime
-      - name: snuba-attribution
       - name: snuba-dead-letter-metrics
-      - name: snuba-dead-letter-sessions
       - name: snuba-dead-letter-generic-metrics
       - name: snuba-dead-letter-replays
       - name: snuba-dead-letter-generic-events
       - name: snuba-dead-letter-querylog
       - name: snuba-dead-letter-group-attributes
       - name: ingest-attachments
+      - name: ingest-attachments-dlq
       - name: ingest-transactions
+      - name: ingest-transactions-dlq
+      - name: ingest-transactions-backlog
+      - name: ingest-events-dlq
       - name: ingest-events
         ## If the number of exceptions increases, it is recommended to increase the number of partitions for ingest-events
         # partitions: 1
       - name: ingest-replay-recordings
       - name: ingest-metrics
+      - name: ingest-metrics-dlq
       - name: ingest-performance-metrics
       - name: ingest-feedback-events
+      - name: ingest-feedback-events-dlq
       - name: ingest-monitors
+      - name: monitors-clock-tasks
+      - name: monitors-clock-tick
+      - name: monitors-incident-occurrences
       - name: profiles
       - name: ingest-occurrences
       - name: snuba-spans
+      - name: snuba-eap-spans-commit-log
+      - name: scheduled-subscriptions-eap-spans
+      - name: eap-spans-subscription-results
+      - name: snuba-eap-mutations
+      - name: snuba-lw-deletions-generic-events
       - name: shared-resources-usage
-      - name: snuba-metrics-summaries
+      - name: snuba-profile-chunks
+      - name: buffered-segments
+      - name: buffered-segments-dlq
+      - name: uptime-configs
+      - name: uptime-results
+      - name: snuba-uptime-results
+      - name: task-worker
+      - name: snuba-ourlogs
   listeners:
     client:
       protocol: "PLAINTEXT"
